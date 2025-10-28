@@ -84,7 +84,7 @@ app.get('/api/health', (req, res) => {
     version: '1.0.0',
     services: {
       database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      ai: process.env.OPENAI_API_KEY ? 'configured' : 'not configured'
+      ai: process.env.GEMINI_API_KEY ? 'configured' : 'not configured'
     }
   });
 });
