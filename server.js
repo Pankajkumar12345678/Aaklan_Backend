@@ -3,8 +3,6 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import morgan from 'morgan';
 import connectDB from './config/database.js';
@@ -29,46 +27,35 @@ const allowedOrigins = [
   'http://localhost:3000' // for local dev
 ];
 
+// CORS middleware
 app.use(cors({
-  origin: function(origin, callback){
-    // allow requests with no origin (like Postman)
-    if(!origin) return callback(null, true);
-    if(allowedOrigins.indexOf(origin) === -1){
-      const msg = 'CORS policy: This origin is not allowed.';
-      return callback(new Error(msg), false);
+  origin: function(origin, callback) {
+    if(!origin) return callback(null, true); // allow Postman / curl
+    if(!allowedOrigins.includes(origin)){
+      return callback(new Error('CORS not allowed'), false);
     }
     return callback(null, true);
   },
-  credentials: true, // allow cookies
-  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
-}));
-
-// Handle OPTIONS preflight requests
-app.options('*', cors({
-  origin: allowedOrigins,
   credentials: true,
   methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
 }));
 
+// Explicitly handle OPTIONS preflight requests
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  return res.sendStatus(204);
+});
+
 // ----------------- MIDDLEWARE -----------------
 app.use(cookieParser());
 app.use(compression());
-app.use(morgan('combined')); 
+app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// ----------------- RATE LIMITING -----------------
-// Example: you can enable per route
-/*
-const authLimiter = rateLimit({
-  windowMs: 15*60*1000,
-  max: 5,
-  message: 'Too many authentication attempts, please try again later.'
-});
-app.use('/api/auth', authLimiter);
-*/
 
 // ----------------- ROUTES -----------------
 app.use('/api/auth', authRoutes);
