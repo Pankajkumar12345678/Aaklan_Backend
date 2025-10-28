@@ -28,7 +28,7 @@ const app = express();
 //   crossOriginResourcePolicy: { policy: "cross-origin" }
 // }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://aaklan-frontend.vercel.app/',
+  origin: process.env.FRONTEND_URL || 'https://aaklan-frontend.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
