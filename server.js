@@ -21,34 +21,23 @@ dotenv.config();
 
 const app = express();
 
-// ----------------- CORS CONFIGURATION -----------------
+// ----------------- CORS CONFIGURATION - CORRECTED -----------------
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'https://aaklan-frontend.vercel.app',
-  'http://localhost:3000' // for local dev
+  'https://aaklan-frontend.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001'
 ];
 
-// CORS middleware
+// SIMPLE & WORKING CORS CONFIGURATION
 app.use(cors({
-  origin: function(origin, callback) {
-    if(!origin) return callback(null, true); // allow Postman / curl
-    if(!allowedOrigins.includes(origin)){
-      return callback(new Error('CORS not allowed'), false);
-    }
-    return callback(null, true);
-  },
+  origin: allowedOrigins,
   credentials: true,
-  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Explicitly handle OPTIONS preflight requests
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  return res.sendStatus(204);
-});
+// Handle preflight requests
+app.options('*', cors());
 
 // ----------------- MIDDLEWARE -----------------
 app.use(cookieParser());
@@ -81,6 +70,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Test route for CORS
+app.post('/api/test-cors', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS test successful',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ----------------- WELCOME -----------------
 app.get('/api', (req, res) => {
   res.json({
@@ -109,6 +107,16 @@ app.use('*', (req, res) => {
   });
 });
 
+// ----------------- ERROR HANDLER -----------------
+app.use((error, req, res, next) => {
+  console.error('Server Error:', error);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { error: error.message })
+  });
+});
+
 // ----------------- DATABASE CONNECTION -----------------
 connectDB();
 
@@ -118,8 +126,8 @@ app.listen(PORT, () => {
   console.log(`\n🚀 EduAmplify Backend Server Running`);
   console.log(`📍 Port: ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Frontend URL(s): ${allowedOrigins.join(', ')}`);
-  console.log(`📊 Admin Panel: http://localhost:${PORT}/api/admin`);
+  console.log(`🔗 Allowed Origins: ${allowedOrigins.join(', ')}`);
   console.log(`❤️ Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`🔄 CORS Test: http://localhost:${PORT}/api/test-cors`);
   console.log(`⏰ Started at: ${new Date().toLocaleString()}`);
 });
