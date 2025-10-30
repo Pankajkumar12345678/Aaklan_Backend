@@ -137,16 +137,50 @@ export class ExportHelper {
           })
         );
 
-        // Add section content
-        const paragraphs = section.text.split('\n').filter(p => p.trim());
+        // Clean and format section content
+        const cleanedText = this.cleanFormatting(section.text);
+        const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+        
         paragraphs.forEach(paragraph => {
           if (paragraph.trim()) {
-            children.push(
-              new Paragraph({
-                text: paragraph.trim(),
-                spacing: { after: 100 }
-              })
-            );
+            // Check if this is a bullet point or numbered item
+            if (paragraph.match(/^[\*•\-]\s/) || paragraph.match(/^\d+\.\s/)) {
+              children.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: "• ",
+                      bold: true
+                    }),
+                    new TextRun({
+                      text: paragraph.replace(/^[\*•\-]\s/, '').replace(/^\d+\.\s/, '')
+                    })
+                  ],
+                  spacing: { after: 80 },
+                  indent: { left: 200 }
+                })
+              );
+            } 
+            // Check if this is a subheading (contains **)
+            else if (paragraph.includes('**') && paragraph.replace(/\*/g, '').trim().length > 0) {
+              const cleanText = paragraph.replace(/\*/g, '').trim();
+              children.push(
+                new Paragraph({
+                  text: cleanText,
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 200, after: 100 }
+                })
+              );
+            }
+            // Regular paragraph
+            else {
+              children.push(
+                new Paragraph({
+                  text: paragraph.trim(),
+                  spacing: { after: 100 }
+                })
+              );
+            }
           }
         });
 
@@ -167,14 +201,31 @@ export class ExportHelper {
     }
   }
 
-  static getSectionOrder(template) {
-    // Define logical order for sections based on template type
-    const commonSections = [
-      'objectives', 'priorKnowledge', 'warmup', 'introduction', 
-      'mainActivities', 'activities', 'assessment', 'resources', 
-      'differentiation', 'homework', 'notes'
-    ];
+  static cleanFormatting(text) {
+    if (!text) return '';
+    
+    // Remove multiple asterisks but keep the content
+    let cleaned = text
+      .replace(/\*\*\*/g, '') // Remove triple asterisks
+      .replace(/\*\*/g, '')   // Remove double asterisks
+      .replace(/\*/g, '')     // Remove single asterisks
+      .replace(/\-\-\-/g, '') // Remove triple dashes
+      .replace(/\-\-/g, '')   // Remove double dashes
+      .trim();
+    
+    // Clean up table formatting artifacts
+    cleaned = cleaned.replace(/\|\s*\-\-/g, '') // Remove table formatting lines
+                    .replace(/\-\-\|\s*/g, '') 
+                    .replace(/\|\s*/g, ' | ')   // Improve table readability
+                    .replace(/\s+\|\s+/g, ' | ');
+    
+    // Remove excessive empty lines
+    cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+    
+    return cleaned;
+  }
 
+  static getSectionOrder(template) {
     const templateSpecific = {
       lesson_plan: [
         'objectives', 'priorKnowledge', 'warmup', 'introduction', 
@@ -198,7 +249,7 @@ export class ExportHelper {
       debate: [
         'objectives', 'topic', 'forArguments', 'againstArguments',
         'moderatorGuidelines', 'evaluationCriteria', 'timingStructure',
-        'resources'
+        'researchGuidelines', 'resources'
       ],
       unit_plan: [
         'objectives', 'activities', 'assessment', 'resources',
@@ -206,7 +257,7 @@ export class ExportHelper {
       ]
     };
 
-    return templateSpecific[template] || commonSections;
+    return templateSpecific[template] || Object.keys(templateSpecific.debate);
   }
 
   static formatSectionName(sectionName) {
@@ -250,11 +301,12 @@ export class ExportHelper {
       
       // Debate specific
       topic: 'Debate Topic',
-      forArguments: 'Arguments For',
-      againstArguments: 'Arguments Against',
+      forArguments: 'Arguments For (PROS)',
+      againstArguments: 'Arguments Against (CONS)',
       moderatorGuidelines: 'Moderator Guidelines',
       evaluationCriteria: 'Evaluation Criteria',
-      timingStructure: 'Timing Structure'
+      timingStructure: 'Timing Structure',
+      researchGuidelines: 'Research Guidelines'
     };
 
     return nameMap[sectionName] || this.formatKey(sectionName);
@@ -282,7 +334,16 @@ export class ExportHelper {
   static async generatePDF(lesson) {
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({ margin: 50 });
+        const doc = new PDFDocument({ 
+          margin: 50,
+          size: 'A4',
+          info: {
+            Title: lesson.title || 'Lesson Plan',
+            Author: 'Lesson Planner',
+            Subject: lesson.subject || 'Education'
+          }
+        });
+        
         const buffers = [];
 
         doc.on('data', buffers.push.bind(buffers));
@@ -291,15 +352,15 @@ export class ExportHelper {
         // Title
         doc.fontSize(20).font('Helvetica-Bold')
            .text(lesson.title || 'Untitled Lesson', { align: 'center' })
-           .moveDown();
+           .moveDown(0.5);
 
         // Metadata
         doc.fontSize(10).font('Helvetica')
-           .text(`Grade: ${lesson.grade || 'Not specified'}`, 50, doc.y, { continued: true })
-           .text(` | Subject: ${lesson.subject || 'Not specified'}`, { continued: true })
-           .text(` | Curriculum: ${lesson.curriculum || 'Not specified'}`)
-           .text(`Duration: ${lesson.duration ? `${lesson.duration} minutes` : 'Not specified'}`, 50, doc.y)
-           .text(`Template: ${this.formatTemplateName(lesson.template)}`, 50, doc.y)
+           .text(`Grade: ${lesson.grade || 'Not specified'}`, { align: 'center' })
+           .text(`Subject: ${lesson.subject || 'Not specified'}`, { align: 'center' })
+           .text(`Curriculum: ${lesson.curriculum || 'Not specified'}`, { align: 'center' })
+           .text(`Duration: ${lesson.duration ? `${lesson.duration} minutes` : 'Not specified'}`, { align: 'center' })
+           .text(`Template: ${this.formatTemplateName(lesson.template)}`, { align: 'center' })
            .moveDown();
 
         // Add horizontal line
@@ -333,19 +394,36 @@ export class ExportHelper {
         
         const displayName = this.formatSectionName(sectionName);
         
+        // Check if we need a new page
+        if (doc.y > 650) {
+          doc.addPage();
+        }
+        
         // Add section heading
         doc.fontSize(14).font('Helvetica-Bold')
-           .text(displayName, 50, doc.y)
-           .moveDown(0.5);
+           .text(displayName, { underline: true })
+           .moveDown(0.3);
 
-        // Add section content
-        doc.fontSize(10).font('Helvetica')
-           .text(section.text, 50, doc.y, {
-             width: 480,
-             align: 'left',
-             lineGap: 5
-           })
-           .moveDown();
+        // Clean and format section content
+        const cleanedText = this.cleanFormatting(section.text);
+        const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+        
+        doc.fontSize(10).font('Helvetica');
+        
+        paragraphs.forEach(paragraph => {
+          if (paragraph.trim()) {
+            // Check if this is a bullet point
+            if (paragraph.match(/^[\*•\-]\s/) || paragraph.match(/^\d+\.\s/)) {
+              const bulletText = paragraph.replace(/^[\*•\-]\s/, '').replace(/^\d+\.\s/, '');
+              doc.text(`• ${bulletText}`, { indent: 20, align: 'left' });
+            } else {
+              doc.text(paragraph.trim(), { align: 'left' });
+            }
+            doc.moveDown(0.2);
+          }
+        });
+
+        doc.moveDown(0.5);
       }
     }
 
@@ -358,16 +436,26 @@ export class ExportHelper {
   static async generatePPTX(lesson) {
     const pptx = new PptxGenJS();
     
+    // Set presentation properties
+    pptx.title = lesson.title || 'Lesson Plan';
+    pptx.author = 'Lesson Planner';
+    
     // Title slide
     const titleSlide = pptx.addSlide();
     titleSlide.addText(lesson.title || 'Untitled Lesson', {
       x: 0.5, y: 1.5, w: 9, h: 1.5,
-      fontSize: 24, bold: true, align: "center"
+      fontSize: 24, bold: true, align: "center",
+      color: "000000"
     });
     
     titleSlide.addText(
-      `Grade: ${lesson.grade || 'N/A'} | Subject: ${lesson.subject || 'N/A'}\nCurriculum: ${lesson.curriculum || 'N/A'} | Duration: ${lesson.duration || 'N/A'}\nTemplate: ${this.formatTemplateName(lesson.template)}`,
-      { x: 0.5, y: 3.0, w: 9, fontSize: 12, align: "center" }
+      `Grade: ${lesson.grade || 'N/A'}\nSubject: ${lesson.subject || 'N/A'}\nCurriculum: ${lesson.curriculum || 'N/A'}\nDuration: ${lesson.duration || 'N/A'} minutes\nTemplate: ${this.formatTemplateName(lesson.template)}`,
+      { 
+        x: 0.5, y: 3.0, w: 9, h: 2,
+        fontSize: 14, align: "center", 
+        color: "444444",
+        lineSpacing: 1.2
+      }
     );
 
     // Add slides for each section with content
@@ -378,22 +466,35 @@ export class ExportHelper {
         const section = lesson.sections[sectionName];
         if (section && section.text && section.text.trim()) {
           const displayName = this.formatSectionName(sectionName);
+          const cleanedText = this.cleanFormatting(section.text);
           
           const contentSlide = pptx.addSlide();
+          
+          // Add section title
           contentSlide.addText(displayName, {
-            x: 0.5, y: 0.5, w: 9, fontSize: 18, bold: true
+            x: 0.5, y: 0.5, w: 9, h: 0.8,
+            fontSize: 20, bold: true,
+            color: "000000",
+            align: "left"
           });
 
+          // Format content for PPT
+          let formattedContent = cleanedText;
+          
           // Truncate content if too long for slide
-          let contentText = section.text;
-          if (contentText.length > 1000) {
-            contentText = contentText.substring(0, 1000) + '...';
+          if (formattedContent.length > 1500) {
+            formattedContent = formattedContent.substring(0, 1500) + '...\n\n[Content truncated for presentation]';
           }
 
-          contentSlide.addText(contentText, {
-            x: 0.5, y: 1.5, w: 9, h: 5,
+          // Add content with proper formatting
+          contentSlide.addText(formattedContent, {
+            x: 0.5, y: 1.5, w: 9, h: 5.5,
             fontSize: 12,
-            lineSpacing: 1.2
+            color: "333333",
+            align: "left",
+            lineSpacing: 1.3,
+            bullet: false,
+            margin: [0.1, 0.1, 0.1, 0.1]
           });
         }
       }

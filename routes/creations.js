@@ -192,6 +192,46 @@ router.post('/:id/duplicate',
   }
 );
 
+
+
+
+router.delete('/:id',
+  authenticate,
+  trackUsage('delete_content', 'lesson'),
+  async (req, res) => {
+    try {
+      const creation = await Lesson.findById(req.params.id);
+
+      if (!creation) {
+        return res.status(404).json({ message: 'Creation not found' });
+      }
+
+      // Simple check: Only creator or admin can delete
+      const isCreator = creation.createdBy.toString() === req.user._id.toString();
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ 
+          message: 'Access denied. Only creator or admin can delete this creation.' 
+        });
+      }
+       
+      await Lesson.findByIdAndDelete(req.params.id);
+
+      res.json({
+        message: 'Creation deleted successfully',
+        deletedId: req.params.id,
+        deletedTitle: creation.title
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        message: 'Failed to delete creation', 
+        error: error.message 
+      });
+    }
+  }
+);
+
 // Share creation (generate shareable link)
 router.post('/:id/share',
   authenticate,
