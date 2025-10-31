@@ -91,9 +91,9 @@ export class ExportHelper {
       })
     );
 
-    children.push(new Paragraph({ text: "" })); // Empty space
+    children.push(new Paragraph({ text: "" }));
 
-    // Extract and add content from sections
+    // Extract and add content from sections with proper formatting
     this.addContentFromSections(children, lesson);
     
     return new Document({
@@ -116,7 +116,6 @@ export class ExportHelper {
       return;
     }
 
-    // Define section display order based on template
     const sectionOrder = this.getSectionOrder(lesson.template);
     
     let hasContent = false;
@@ -137,59 +136,14 @@ export class ExportHelper {
           })
         );
 
-        // Clean and format section content
-        const cleanedText = this.cleanFormatting(section.text);
-        const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+        // Process content based on section type
+        this.processSectionContent(children, sectionName, section.text);
         
-        paragraphs.forEach(paragraph => {
-          if (paragraph.trim()) {
-            // Check if this is a bullet point or numbered item
-            if (paragraph.match(/^[\*•\-]\s/) || paragraph.match(/^\d+\.\s/)) {
-              children.push(
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: "• ",
-                      bold: true
-                    }),
-                    new TextRun({
-                      text: paragraph.replace(/^[\*•\-]\s/, '').replace(/^\d+\.\s/, '')
-                    })
-                  ],
-                  spacing: { after: 80 },
-                  indent: { left: 200 }
-                })
-              );
-            } 
-            // Check if this is a subheading (contains **)
-            else if (paragraph.includes('**') && paragraph.replace(/\*/g, '').trim().length > 0) {
-              const cleanText = paragraph.replace(/\*/g, '').trim();
-              children.push(
-                new Paragraph({
-                  text: cleanText,
-                  heading: HeadingLevel.HEADING_2,
-                  spacing: { before: 200, after: 100 }
-                })
-              );
-            }
-            // Regular paragraph
-            else {
-              children.push(
-                new Paragraph({
-                  text: paragraph.trim(),
-                  spacing: { after: 100 }
-                })
-              );
-            }
-          }
-        });
-
         // Add some space after section
         children.push(new Paragraph({ text: "" }));
       }
     }
 
-    // If no sections have content, show message
     if (!hasContent) {
       children.push(
         new Paragraph({
@@ -201,25 +155,286 @@ export class ExportHelper {
     }
   }
 
+  static processSectionContent(children, sectionName, text) {
+    const cleanedText = this.cleanFormatting(text);
+    const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+
+    switch(sectionName) {
+      case 'forArguments':
+      case 'againstArguments':
+        this.processArgumentsContent(children, paragraphs);
+        break;
+      
+      case 'evaluationCriteria':
+        this.processTableContent(children, paragraphs);
+        break;
+      
+      case 'timingStructure':
+        this.processTimingContent(children, paragraphs);
+        break;
+      
+      case 'moderatorGuidelines':
+        this.processGuidelinesContent(children, paragraphs);
+        break;
+      
+      case 'researchGuidelines':
+        this.processResearchContent(children, paragraphs);
+        break;
+      
+      default:
+        this.processDefaultContent(children, paragraphs);
+    }
+  }
+
+  static processArgumentsContent(children, paragraphs) {
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim()) {
+        // Check if this is an argument point
+        if (paragraph.match(/^(•|\*|\-|\d+\.)\s/)) {
+          const cleanPoint = paragraph.replace(/^(•|\*|\-|\d+\.)\s/, '');
+          
+          // Argument point with bold title
+          const colonIndex = cleanPoint.indexOf(':');
+          if (colonIndex > 0) {
+            const title = cleanPoint.substring(0, colonIndex + 1);
+            const content = cleanPoint.substring(colonIndex + 1);
+            
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "• " + title,
+                    bold: true
+                  }),
+                  new TextRun({
+                    text: content
+                  })
+                ],
+                spacing: { after: 120 },
+                indent: { left: 200 }
+              })
+            );
+          } else {
+            children.push(
+              new Paragraph({
+                text: "• " + cleanPoint,
+                spacing: { after: 120 },
+                indent: { left: 200 }
+              })
+            );
+          }
+        } 
+        // Evidence section
+        else if (paragraph.toLowerCase().includes('evidence:')) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Evidence: ",
+                  bold: true,
+                  italics: true
+                }),
+                new TextRun({
+                  text: paragraph.replace(/evidence:\s*/i, ''),
+                  italics: true
+                })
+              ],
+              spacing: { after: 120 },
+              indent: { left: 400 }
+            })
+          );
+        }
+        // Regular paragraph
+        else {
+          children.push(
+            new Paragraph({
+              text: paragraph.trim(),
+              spacing: { after: 100 }
+            })
+          );
+        }
+      }
+    });
+  }
+
+  static processTableContent(children, paragraphs) {
+    // Simple table representation for rubric
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim() && paragraph.includes('|')) {
+        const cells = paragraph.split('|').map(cell => cell.trim()).filter(cell => cell);
+        
+        if (cells.length > 1) {
+          // Table header or row
+          const tableRow = new TableRow({
+            children: cells.map(cell => 
+              new TableCell({
+                children: [new Paragraph({ text: cell })],
+                shading: cell.includes('Criteria') || cell.includes('Excellent') ? { fill: "F3F4F6" } : {}
+              })
+            )
+          });
+
+          children.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [tableRow],
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+                left: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+                right: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+                insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" },
+              },
+            })
+          );
+        }
+      } else if (paragraph.trim()) {
+        children.push(
+          new Paragraph({
+            text: paragraph.trim(),
+            spacing: { after: 100 }
+          })
+        );
+      }
+    });
+  }
+
+  static processTimingContent(children, paragraphs) {
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim()) {
+        // Timing items with bold labels
+        const colonIndex = paragraph.indexOf(':');
+        if (colonIndex > 0) {
+          const label = paragraph.substring(0, colonIndex + 1);
+          const time = paragraph.substring(colonIndex + 1);
+          
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: label,
+                  bold: true
+                }),
+                new TextRun({
+                  text: time
+                })
+              ],
+              spacing: { after: 80 }
+            })
+          );
+        } else {
+          children.push(
+            new Paragraph({
+              text: paragraph.trim(),
+              spacing: { after: 80 }
+            })
+          );
+        }
+      }
+    });
+  }
+
+  static processGuidelinesContent(children, paragraphs) {
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim()) {
+        // Guidelines with time indicators
+        if (paragraph.includes('(') && paragraph.includes(')')) {
+          const timeMatch = paragraph.match(/\((\d+)\s*minute/);
+          if (timeMatch) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: paragraph,
+                    bold: true
+                  })
+                ],
+                spacing: { after: 100 }
+              })
+            );
+          } else {
+            children.push(
+              new Paragraph({
+                text: paragraph.trim(),
+                spacing: { after: 100 }
+              })
+            );
+          }
+        } else {
+          children.push(
+            new Paragraph({
+              text: paragraph.trim(),
+              spacing: { after: 100 }
+            })
+          );
+        }
+      }
+    });
+  }
+
+  static processResearchContent(children, paragraphs) {
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim()) {
+        // Research guidelines with bold labels
+        const colonIndex = paragraph.indexOf(':');
+        if (colonIndex > 0) {
+          const label = paragraph.substring(0, colonIndex + 1);
+          const content = paragraph.substring(colonIndex + 1);
+          
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: label,
+                  bold: true
+                }),
+                new TextRun({
+                  text: content
+                })
+              ],
+              spacing: { after: 80 }
+            })
+          );
+        } else {
+          children.push(
+            new Paragraph({
+              text: paragraph.trim(),
+              spacing: { after: 80 }
+            })
+          );
+        }
+      }
+    });
+  }
+
+  static processDefaultContent(children, paragraphs) {
+    paragraphs.forEach(paragraph => {
+      if (paragraph.trim()) {
+        children.push(
+          new Paragraph({
+            text: paragraph.trim(),
+            spacing: { after: 100 }
+          })
+        );
+      }
+    });
+  }
+
   static cleanFormatting(text) {
     if (!text) return '';
     
-    // Remove multiple asterisks but keep the content
+    // Remove markdown formatting but keep structure
     let cleaned = text
-      .replace(/\*\*\*/g, '') // Remove triple asterisks
-      .replace(/\*\*/g, '')   // Remove double asterisks
-      .replace(/\*/g, '')     // Remove single asterisks
-      .replace(/\-\-\-/g, '') // Remove triple dashes
-      .replace(/\-\-/g, '')   // Remove double dashes
+      .replace(/\*\*\*(.*?)\*\*\*/g, '$1')  // Keep bold-italic content
+      .replace(/\*\*(.*?)\*\*/g, '$1')      // Keep bold content  
+      .replace(/\*(.*?)\*/g, '$1')          // Keep italic content
+      .replace(/\>\s*/g, '')                // Remove blockquote markers
+      .replace(/\-\-\-/g, '—')              // Convert dashes to em-dash
+      .replace(/\{\[.*?\]\}/g, '')          // Remove template variables
       .trim();
     
-    // Clean up table formatting artifacts
-    cleaned = cleaned.replace(/\|\s*\-\-/g, '') // Remove table formatting lines
-                    .replace(/\-\-\|\s*/g, '') 
-                    .replace(/\|\s*/g, ' | ')   // Improve table readability
-                    .replace(/\s+\|\s+/g, ' | ');
-    
-    // Remove excessive empty lines
+    // Clean up excessive empty lines but keep paragraph breaks
     cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
     
     return cleaned;
@@ -356,10 +571,8 @@ export class ExportHelper {
 
         // Metadata
         doc.fontSize(10).font('Helvetica')
-           .text(`Grade: ${lesson.grade || 'Not specified'}`, { align: 'center' })
-           .text(`Subject: ${lesson.subject || 'Not specified'}`, { align: 'center' })
-           .text(`Curriculum: ${lesson.curriculum || 'Not specified'}`, { align: 'center' })
-           .text(`Duration: ${lesson.duration ? `${lesson.duration} minutes` : 'Not specified'}`, { align: 'center' })
+           .text(`Grade: ${lesson.grade || 'Not specified'} | Subject: ${lesson.subject || 'Not specified'}`, { align: 'center' })
+           .text(`Curriculum: ${lesson.curriculum || 'Not specified'} | Duration: ${lesson.duration ? `${lesson.duration} minutes` : 'Not specified'}`, { align: 'center' })
            .text(`Template: ${this.formatTemplateName(lesson.template)}`, { align: 'center' })
            .moveDown();
 
@@ -404,25 +617,9 @@ export class ExportHelper {
            .text(displayName, { underline: true })
            .moveDown(0.3);
 
-        // Clean and format section content
-        const cleanedText = this.cleanFormatting(section.text);
-        const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+        // Process content based on section type
+        this.processPDFSectionContent(doc, sectionName, section.text);
         
-        doc.fontSize(10).font('Helvetica');
-        
-        paragraphs.forEach(paragraph => {
-          if (paragraph.trim()) {
-            // Check if this is a bullet point
-            if (paragraph.match(/^[\*•\-]\s/) || paragraph.match(/^\d+\.\s/)) {
-              const bulletText = paragraph.replace(/^[\*•\-]\s/, '').replace(/^\d+\.\s/, '');
-              doc.text(`• ${bulletText}`, { indent: 20, align: 'left' });
-            } else {
-              doc.text(paragraph.trim(), { align: 'left' });
-            }
-            doc.moveDown(0.2);
-          }
-        });
-
         doc.moveDown(0.5);
       }
     }
@@ -430,6 +627,36 @@ export class ExportHelper {
     if (!hasContent) {
       doc.fontSize(12).font('Helvetica')
          .text('No content available for this lesson.', { align: 'center' });
+    }
+  }
+
+  static processPDFSectionContent(doc, sectionName, text) {
+    const cleanedText = this.cleanFormatting(text);
+    const paragraphs = cleanedText.split('\n').filter(p => p.trim());
+
+    doc.fontSize(10).font('Helvetica');
+
+    switch(sectionName) {
+      case 'forArguments':
+      case 'againstArguments':
+        paragraphs.forEach(paragraph => {
+          if (paragraph.match(/^(•|\*|\-|\d+\.)\s/)) {
+            const cleanPoint = paragraph.replace(/^(•|\*|\-|\d+\.)\s/, '');
+            doc.text(`• ${cleanPoint}`, { indent: 20, align: 'left' });
+          } else if (paragraph.toLowerCase().includes('evidence:')) {
+            doc.text(paragraph, { indent: 40, align: 'left' });
+          } else {
+            doc.text(paragraph, { align: 'left' });
+          }
+          doc.moveDown(0.2);
+        });
+        break;
+      
+      default:
+        paragraphs.forEach(paragraph => {
+          doc.text(paragraph, { align: 'left' });
+          doc.moveDown(0.2);
+        });
     }
   }
 
@@ -449,7 +676,7 @@ export class ExportHelper {
     });
     
     titleSlide.addText(
-      `Grade: ${lesson.grade || 'N/A'}\nSubject: ${lesson.subject || 'N/A'}\nCurriculum: ${lesson.curriculum || 'N/A'}\nDuration: ${lesson.duration || 'N/A'} minutes\nTemplate: ${this.formatTemplateName(lesson.template)}`,
+      `Grade: ${lesson.grade || 'N/A'} | Subject: ${lesson.subject || 'N/A'}\nCurriculum: ${lesson.curriculum || 'N/A'} | Duration: ${lesson.duration || 'N/A'} minutes\nTemplate: ${this.formatTemplateName(lesson.template)}`,
       { 
         x: 0.5, y: 3.0, w: 9, h: 2,
         fontSize: 14, align: "center", 
@@ -482,8 +709,8 @@ export class ExportHelper {
           let formattedContent = cleanedText;
           
           // Truncate content if too long for slide
-          if (formattedContent.length > 1500) {
-            formattedContent = formattedContent.substring(0, 1500) + '...\n\n[Content truncated for presentation]';
+          if (formattedContent.length > 1200) {
+            formattedContent = formattedContent.substring(0, 1200) + '...\n\n[Content truncated for presentation]';
           }
 
           // Add content with proper formatting
@@ -493,20 +720,10 @@ export class ExportHelper {
             color: "333333",
             align: "left",
             lineSpacing: 1.3,
-            bullet: false,
-            margin: [0.1, 0.1, 0.1, 0.1]
+            bullet: false
           });
         }
       }
-    }
-
-    // If no content, add a placeholder slide
-    if (!lesson.sections || Object.keys(lesson.sections).length === 0) {
-      const placeholderSlide = pptx.addSlide();
-      placeholderSlide.addText("No Content Available", {
-        x: 0.5, y: 2.5, w: 9, h: 2,
-        fontSize: 18, align: "center", color: "666666"
-      });
     }
 
     return pptx.write('base64').then(base64 => Buffer.from(base64, 'base64'));
